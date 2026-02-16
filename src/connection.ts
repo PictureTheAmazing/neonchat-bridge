@@ -187,6 +187,19 @@ export class ConnectionManager {
       this.currentStatus = 'online';
     });
 
+    // Handle process exit (in case result never fires)
+    this.executor.on('exit', (code: number | null) => {
+      if (this.currentStatus === 'busy') {
+        // Process exited while still busy - probably an error
+        this.sendResponse({
+          type: 'error',
+          request_id: command.request_id,
+          error: `Claude Code process exited unexpectedly with code ${code}`,
+        });
+        this.currentStatus = 'online';
+      }
+    });
+
     // Start execution
     try {
       await this.executor.execute({

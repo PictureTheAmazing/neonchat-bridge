@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { statSync, openSync, readSync, closeSync, unlinkSync } from 'node:fs';
+import { readFileSync, statSync, openSync, readSync, closeSync, unlinkSync } from 'node:fs';
 export class ClaudeCodeExecutor extends EventEmitter {
     process = null;
     sessionId = '';
@@ -54,6 +54,8 @@ export class ClaudeCodeExecutor extends EventEmitter {
             });
             this.buffer = '';
             let fileOffset = 0;
+            let lastOutputTime = Date.now();
+            let noOutputWarned = false;
             // Poll the output file for new data
             const pollInterval = setInterval(() => {
                 try {
@@ -66,6 +68,25 @@ export class ClaudeCodeExecutor extends EventEmitter {
                         fileOffset = stat.size;
                         this.buffer += buf.toString();
                         this.processBuffer();
+                        lastOutputTime = Date.now();
+                        noOutputWarned = false;
+                    }
+                    else {
+                        // Check if no output for too long
+                        const noOutputDuration = Date.now() - lastOutputTime;
+                        if (noOutputDuration > 30000 && !noOutputWarned) {
+                            noOutputWarned = true;
+                            this.emit('message', {
+                                type: 'assistant_message',
+                                message: {
+                                    role: 'assistant',
+                                    content: [{
+                                            type: 'text',
+                                            text: 'Claude Code is still running but hasn\'t produced output in 30 seconds. This might indicate an issue. Check the bridge logs or try canceling and restarting.',
+                                        }],
+                                },
+                            });
+                        }
                     }
                 }
                 catch {
@@ -104,6 +125,25 @@ export class ClaudeCodeExecutor extends EventEmitter {
                 }
                 catch { /* ignore */ }
                 this.processBuffer();
+                // If there was an error, send stderr as a system message
+                if (code !== 0) {
+                    try {
+                        const stderr = readFileSync(errFile, 'utf8');
+                        if (stderr.trim()) {
+                            this.emit('message', {
+                                type: 'assistant_message',
+                                message: {
+                                    role: 'assistant',
+                                    content: [{
+                                            type: 'text',
+                                            text: `Claude Code exited with code ${code}. Error:\n${stderr}`,
+                                        }],
+                                },
+                            });
+                        }
+                    }
+                    catch { /* ignore */ }
+                }
                 // Clean up temp files
                 try {
                     unlinkSync(outFile);
