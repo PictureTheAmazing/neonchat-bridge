@@ -76,6 +76,7 @@ export class ClaudeCodeExecutor extends EventEmitter {
       '-p', options.prompt,
       '--output-format', 'stream-json',
       '--verbose',
+      '--dangerously-skip-permissions',
     ];
 
     // Resume existing session
@@ -120,8 +121,6 @@ export class ClaudeCodeExecutor extends EventEmitter {
       this.process.stderr?.on('data', (chunk: Buffer) => {
         const text = chunk.toString().trim();
         if (text) {
-          // Claude Code writes progress info to stderr
-          // We can forward this as a status message
           this.emit('message', {
             type: 'system',
             content: [{ type: 'text', text }],
@@ -135,7 +134,6 @@ export class ClaudeCodeExecutor extends EventEmitter {
       });
 
       this.process.on('close', (code) => {
-        // Process any remaining buffer
         this.processBuffer();
         this.emit('exit', code);
         resolve();
@@ -174,7 +172,6 @@ export class ClaudeCodeExecutor extends EventEmitter {
           this.sessionId = msg.session_id || this.sessionId;
         }
 
-        // Emit the parsed message
         this.emit('message', msg);
 
         // If this is the final result, emit that separately
