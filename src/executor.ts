@@ -77,7 +77,7 @@ export class ClaudeCodeExecutor extends EventEmitter {
    * native binary doesn't write to Node.js socket-pair stdio on ARM64.
    */
   async execute(options: ExecuteOptions): Promise<void> {
-    // Pre-flight check: verify claude command exists
+    // Pre-flight check: verify claude command exists and works
     const isWindows = process.platform === 'win32';
     const checkCmd = isWindows ? 'where claude' : 'which claude';
     try {
@@ -87,6 +87,18 @@ export class ClaudeCodeExecutor extends EventEmitter {
         'Claude CLI not found in PATH. Please install it from https://claude.ai/download ' +
         'and ensure the "claude" command is available. ' +
         (isWindows ? 'You may need to restart your terminal after installation.' : '')
+      );
+    }
+
+    // Try to run claude --version to verify it actually works
+    try {
+      const versionOutput = execSync('claude --version', { encoding: 'utf8', stdio: 'pipe' });
+      console.log('[Bridge] Claude CLI version:', versionOutput.trim());
+    } catch (versionErr: any) {
+      throw new Error(
+        `Claude CLI exists but failed to run: ${versionErr.message}\n` +
+        'This might indicate a corrupted installation or permission issue. ' +
+        'Try reinstalling from https://claude.ai/download'
       );
     }
 
