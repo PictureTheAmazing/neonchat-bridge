@@ -140,39 +140,30 @@ export class ClaudeCodeExecutor extends EventEmitter {
                 }
                 catch { /* ignore */ }
                 this.processBuffer();
-                // If there was an error, send stderr as a system message
+                // If there was an error, send stderr as a system message BEFORE cleanup
+                let stderrContent = '';
                 if (code !== 0) {
                     try {
-                        const stderr = readFileSync(errFile, 'utf8');
-                        const errorMsg = stderr.trim()
-                            ? `Claude Code exited with code ${code}.\n\nError output:\n${stderr}`
-                            : `Claude Code exited with code ${code} (no error output captured)`;
-                        this.emit('message', {
-                            type: 'assistant_message',
-                            message: {
-                                role: 'assistant',
-                                content: [{
-                                        type: 'text',
-                                        text: errorMsg,
-                                    }],
-                            },
-                        });
+                        stderrContent = readFileSync(errFile, 'utf8');
                     }
                     catch (readErr) {
-                        // Even if we can't read stderr, emit the exit code
-                        this.emit('message', {
-                            type: 'assistant_message',
-                            message: {
-                                role: 'assistant',
-                                content: [{
-                                        type: 'text',
-                                        text: `Claude Code exited with code ${code} (failed to read error file: ${readErr})`,
-                                    }],
-                            },
-                        });
+                        stderrContent = `(failed to read error file: ${readErr})`;
                     }
+                    const errorMsg = stderrContent.trim() && !stderrContent.startsWith('(failed')
+                        ? `Claude Code exited with code ${code}.\n\nError output:\n${stderrContent}`
+                        : `Claude Code exited with code ${code} (no error output captured)`;
+                    this.emit('message', {
+                        type: 'assistant_message',
+                        message: {
+                            role: 'assistant',
+                            content: [{
+                                    type: 'text',
+                                    text: errorMsg,
+                                }],
+                        },
+                    });
                 }
-                // Clean up temp files
+                // Clean up temp files AFTER reading stderr
                 try {
                     unlinkSync(outFile);
                 }
