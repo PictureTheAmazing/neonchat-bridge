@@ -1,5 +1,9 @@
 import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import { appendFileSync } from 'node:fs';
+function debugLog(msg) {
+    appendFileSync('/tmp/bridge-debug.log', `${new Date().toISOString()} ${msg}\n`);
+}
 export class ClaudeCodeExecutor extends EventEmitter {
     process = null;
     sessionId = '';
@@ -38,20 +42,26 @@ export class ClaudeCodeExecutor extends EventEmitter {
         return new Promise((resolve, reject) => {
             const env = { ...process.env };
             delete env.CLAUDECODE; // Allow spawning Claude Code from within a Claude Code session
+            debugLog(`Spawning: claude ${args.join(' ')}`);
+            debugLog(`CWD: ${cwd}`);
             this.process = spawn('claude', args, {
                 cwd,
                 env,
                 stdio: ['pipe', 'pipe', 'pipe'],
             });
+            debugLog(`Spawned PID: ${this.process.pid}`);
+            debugLog(`stdout exists: ${!!this.process.stdout}`);
+            debugLog(`stderr exists: ${!!this.process.stderr}`);
             this.buffer = '';
             this.process.stdout?.on('data', (chunk) => {
                 const text = chunk.toString();
-                console.error(`[DEBUG] stdout: ${text.length} bytes`);
+                debugLog(`STDOUT: ${text.length} bytes: ${text.slice(0, 200)}`);
                 this.buffer += text;
                 this.processBuffer();
             });
             this.process.stderr?.on('data', (chunk) => {
                 const text = chunk.toString().trim();
+                debugLog(`STDERR: ${text.slice(0, 200)}`);
                 if (text) {
                     this.emit('message', {
                         type: 'system',
@@ -60,10 +70,12 @@ export class ClaudeCodeExecutor extends EventEmitter {
                 }
             });
             this.process.on('error', (err) => {
+                debugLog(`ERROR: ${err.message}`);
                 this.emit('error', err);
                 reject(err);
             });
             this.process.on('close', (code) => {
+                debugLog(`CLOSE: code=${code}`);
                 this.processBuffer();
                 this.emit('exit', code);
                 resolve();

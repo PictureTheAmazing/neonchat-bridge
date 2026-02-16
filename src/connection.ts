@@ -2,6 +2,7 @@ import WebSocket from 'ws';
 import pc from 'picocolors';
 import { hostname, platform, arch, type as osType, uptime, freemem } from 'node:os';
 import { execSync } from 'node:child_process';
+import { appendFileSync } from 'node:fs';
 import { ClaudeCodeExecutor, type ClaudeStreamMessage, type ClaudeResult } from './executor.js';
 import { getConfig } from './config.js';
 import type { AgentCommand, AgentHeartbeat, AgentResponse, AgentStatus, SystemInfo } from './types.js';
@@ -232,10 +233,11 @@ export class ConnectionManager {
   /** Send a response back to NeonChat */
   private sendResponse(response: AgentResponse): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(response));
-      if (this.verbose) {
-        this.log(pc.dim(`→ ${response.type} [${response.request_id}]`));
-      }
+      const json = JSON.stringify(response);
+      appendFileSync('/tmp/bridge-debug.log', `${new Date().toISOString()} SEND: ${response.type} [${response.request_id}] ${json.slice(0, 300)}\n`);
+      this.ws.send(json);
+    } else {
+      appendFileSync('/tmp/bridge-debug.log', `${new Date().toISOString()} SEND FAILED (ws not open): ${response.type}\n`);
     }
   }
 
