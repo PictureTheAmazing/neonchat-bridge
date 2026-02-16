@@ -101,9 +101,12 @@ export class ClaudeCodeExecutor extends EventEmitter {
     const cwd = options.working_directory || process.cwd();
 
     return new Promise((resolve, reject) => {
+      const env = { ...process.env };
+      delete env.CLAUDECODE; // Allow spawning Claude Code from within a Claude Code session
+
       this.process = spawn('claude', args, {
         cwd,
-        env: { ...process.env },
+        env,
         stdio: ['pipe', 'pipe', 'pipe'],
       });
 
