@@ -111,11 +111,15 @@ export class ConnectionManager {
         // Stream messages back to the UI
         this.executor.on('message', (msg) => {
             // Extract text content for display
-            const textContent = msg.content
+            // stream-json format: assistant messages have text at msg.message.content[].text
+            // while top-level msg.content may also exist for some message types
+            const messageContent = msg.message;
+            const contentArray = messageContent?.content || msg.content;
+            const textContent = contentArray
                 ?.filter((c) => c.type === 'text')
                 .map((c) => c.text)
                 .join('') || '';
-            const role = msg.role || msg.type || 'system';
+            const role = messageContent?.role || msg.role || msg.type || 'system';
             this.sendResponse({
                 type: 'stream',
                 request_id: command.request_id,

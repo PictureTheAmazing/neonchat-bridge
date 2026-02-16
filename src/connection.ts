@@ -133,12 +133,16 @@ export class ConnectionManager {
     // Stream messages back to the UI
     this.executor.on('message', (msg: ClaudeStreamMessage) => {
       // Extract text content for display
-      const textContent = msg.content
+      // stream-json format: assistant messages have text at msg.message.content[].text
+      // while top-level msg.content may also exist for some message types
+      const messageContent = (msg as unknown as Record<string, unknown>).message as { content?: Array<{ type: string; text?: string }>; role?: string } | undefined;
+      const contentArray = messageContent?.content || msg.content;
+      const textContent = contentArray
         ?.filter((c: { type: string; text?: string }) => c.type === 'text')
         .map((c: { type: string; text?: string }) => c.text)
         .join('') || '';
 
-      const role = msg.role || msg.type || 'system';
+      const role = messageContent?.role || msg.role || msg.type || 'system';
 
       this.sendResponse({
         type: 'stream',
