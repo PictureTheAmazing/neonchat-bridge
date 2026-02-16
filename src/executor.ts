@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess, execSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { readFileSync, statSync, openSync, readSync, closeSync, unlinkSync } from 'node:fs';
+import { readFileSync, statSync, openSync, readSync, closeSync, unlinkSync, createWriteStream, WriteStream } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AgentMessage } from './types.js';
@@ -140,25 +140,15 @@ export class ClaudeCodeExecutor extends EventEmitter {
       const outFile = join(tmpdir(), `claude-bridge-${ts}.jsonl`);
       const errFile = join(tmpdir(), `claude-bridge-${ts}.err`);
 
-      // Cross-platform shell spawning
-      const isWindows = process.platform === 'win32';
-      const shell = isWindows ? 'cmd.exe' : 'sh';
-      const shellFlag = isWindows ? '/c' : '-c';
+      // Create write streams for output
+      const outStream = createWriteStream(outFile);
+      const errStream = createWriteStream(errFile);
 
-      let cmd: string;
-      if (isWindows) {
-        // Windows: cmd.exe syntax
-        cmd = `claude ${args.join(' ')} > "${outFile}" 2> "${errFile}"`;
-      } else {
-        // Unix: sh syntax with proper quoting
-        cmd = ['claude', ...args].map(a => `'${a.replace(/'/g, "'\\''")}'`).join(' ');
-        cmd = `${cmd} > '${outFile}' 2> '${errFile}'`;
-      }
-
-      this.process = spawn(shell, [shellFlag, cmd], {
+      // Spawn claude directly without shell (avoids quoting issues on Windows)
+      this.process = spawn('claude', args, {
         cwd,
         env,
-        stdio: 'ignore',
+        stdio: ['ignore', outStream, errStream],
         detached: false,
       });
 
@@ -205,6 +195,9 @@ export class ClaudeCodeExecutor extends EventEmitter {
 
       const cleanup = () => {
         clearInterval(pollInterval);
+        // Close streams
+        outStream.end();
+        errStream.end();
         // Clean up temp files
         try { unlinkSync(outFile); } catch { /* ignore */ }
         try { unlinkSync(errFile); } catch { /* ignore */ }
