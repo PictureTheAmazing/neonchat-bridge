@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, exec, type ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { appendFileSync } from 'node:fs';
 import type { AgentMessage } from './types.js';
@@ -115,12 +115,11 @@ export class ClaudeCodeExecutor extends EventEmitter {
 
       const cmd = ['claude', ...args].map(a => `'${a.replace(/'/g, "'\\''")}'`).join(' ');
       debugLog(`Shell cmd: ${cmd}`);
-      this.process = spawn(cmd, [], {
+      this.process = exec(cmd, {
         cwd,
         env,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        shell: true,
-      });
+        maxBuffer: 100 * 1024 * 1024, // 100MB
+      }) as ChildProcess;
 
       debugLog(`Spawned PID: ${this.process.pid}`);
       debugLog(`stdout exists: ${!!this.process.stdout}`);
