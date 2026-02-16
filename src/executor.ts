@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess, execSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { readFileSync, statSync, openSync, readSync, closeSync, unlinkSync, createWriteStream, WriteStream } from 'node:fs';
+import { readFileSync, statSync, openSync, readSync, closeSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AgentMessage } from './types.js';
@@ -140,15 +140,15 @@ export class ClaudeCodeExecutor extends EventEmitter {
       const outFile = join(tmpdir(), `claude-bridge-${ts}.jsonl`);
       const errFile = join(tmpdir(), `claude-bridge-${ts}.err`);
 
-      // Create write streams for output
-      const outStream = createWriteStream(outFile);
-      const errStream = createWriteStream(errFile);
+      // Open file descriptors for output redirection
+      const outFd = openSync(outFile, 'w');
+      const errFd = openSync(errFile, 'w');
 
       // Spawn claude directly without shell (avoids quoting issues on Windows)
       this.process = spawn('claude', args, {
         cwd,
         env,
-        stdio: ['ignore', outStream, errStream],
+        stdio: ['ignore', outFd, errFd],
         detached: false,
       });
 
@@ -195,9 +195,9 @@ export class ClaudeCodeExecutor extends EventEmitter {
 
       const cleanup = () => {
         clearInterval(pollInterval);
-        // Close streams
-        outStream.end();
-        errStream.end();
+        // Close file descriptors
+        try { closeSync(outFd); } catch { /* ignore */ }
+        try { closeSync(errFd); } catch { /* ignore */ }
         // Clean up temp files
         try { unlinkSync(outFile); } catch { /* ignore */ }
         try { unlinkSync(errFile); } catch { /* ignore */ }
