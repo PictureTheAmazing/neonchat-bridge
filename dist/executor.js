@@ -1,9 +1,6 @@
 import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { appendFileSync, readFileSync, statSync, openSync, readSync, closeSync } from 'node:fs';
-function debugLog(msg) {
-    appendFileSync('/tmp/bridge-debug.log', `${new Date().toISOString()} ${msg}\n`);
-}
+import { statSync, openSync, readSync, closeSync, unlinkSync } from 'node:fs';
 export class ClaudeCodeExecutor extends EventEmitter {
     process = null;
     sessionId = '';
@@ -14,6 +11,8 @@ export class ClaudeCodeExecutor extends EventEmitter {
     /**
      * Execute a Claude Code command and stream the results.
      * Uses `claude -p` with `--output-format stream-json`.
+     * Stdout is redirected to a temp file and polled, because Claude Code's
+     * native binary doesn't write to Node.js socket-pair stdio on ARM64.
      */
     async execute(options) {
         const args = [
@@ -26,10 +25,10 @@ export class ClaudeCodeExecutor extends EventEmitter {
         if (options.session_id) {
             args.push('--resume', options.session_id);
         }
-        // Set allowed tools (disabled for now — debugging)
-        // if (options.allowed_tools && options.allowed_tools.length > 0) {
-        //   args.push('--allowedTools', options.allowed_tools.join(','));
-        // }
+        // Set allowed tools
+        if (options.allowed_tools && options.allowed_tools.length > 0) {
+            args.push('--allowedTools', options.allowed_tools.join(','));
+        }
         // Load MCP config
         if (options.mcp_config_path) {
             args.push('--mcp-config', options.mcp_config_path);
@@ -41,23 +40,18 @@ export class ClaudeCodeExecutor extends EventEmitter {
         const cwd = options.working_directory || process.cwd();
         return new Promise((resolve, reject) => {
             const env = { ...process.env };
-            delete env.CLAUDECODE; // Allow spawning Claude Code from within a Claude Code session
-            debugLog(`Spawning: claude ${args.join(' ')}`);
-            debugLog(`CWD: ${cwd}`);
-            // Use file-based output to work around potential stdio issues with Claude's native binary
-            const outFile = `/tmp/claude-bridge-${Date.now()}.jsonl`;
-            const errFile = `/tmp/claude-bridge-${Date.now()}.err`;
+            delete env.CLAUDECODE; // Allow spawning from within a Claude Code session
+            // File-based stdout/stderr to work around native binary stdio issues
+            const ts = Date.now();
+            const outFile = `/tmp/claude-bridge-${ts}.jsonl`;
+            const errFile = `/tmp/claude-bridge-${ts}.err`;
             const cmd = ['claude', ...args].map(a => `'${a.replace(/'/g, "'\\''")}'`).join(' ');
-            const shellCmd = `${cmd} > '${outFile}' 2> '${errFile}'`;
-            debugLog(`Shell cmd: ${shellCmd}`);
-            this.process = spawn('sh', ['-c', shellCmd], {
+            this.process = spawn('sh', ['-c', `${cmd} > '${outFile}' 2> '${errFile}'`], {
                 cwd,
                 env,
                 stdio: 'ignore',
                 detached: false,
             });
-            debugLog(`Spawned PID: ${this.process.pid}`);
-            debugLog(`Output file: ${outFile}`);
             this.buffer = '';
             let fileOffset = 0;
             // Poll the output file for new data
@@ -70,9 +64,7 @@ export class ClaudeCodeExecutor extends EventEmitter {
                         readSync(fd, buf, 0, buf.length, fileOffset);
                         closeSync(fd);
                         fileOffset = stat.size;
-                        const text = buf.toString();
-                        debugLog(`FILE DATA: ${text.length} bytes: ${text.slice(0, 200)}`);
-                        this.buffer += text;
+                        this.buffer += buf.toString();
                         this.processBuffer();
                     }
                 }
@@ -80,16 +72,26 @@ export class ClaudeCodeExecutor extends EventEmitter {
                     // File might not exist yet
                 }
             }, 200);
-            this.process.on('error', (err) => {
-                debugLog(`ERROR: ${err.message}`);
+            const cleanup = () => {
                 clearInterval(pollInterval);
+                // Clean up temp files
+                try {
+                    unlinkSync(outFile);
+                }
+                catch { /* ignore */ }
+                try {
+                    unlinkSync(errFile);
+                }
+                catch { /* ignore */ }
+            };
+            this.process.on('error', (err) => {
+                cleanup();
                 this.emit('error', err);
                 reject(err);
             });
             this.process.on('close', (code) => {
-                debugLog(`CLOSE: code=${code}`);
                 clearInterval(pollInterval);
-                // Read any remaining data
+                // Read any remaining data before cleanup
                 try {
                     const stat = statSync(outFile);
                     if (stat.size > fileOffset) {
@@ -101,15 +103,16 @@ export class ClaudeCodeExecutor extends EventEmitter {
                     }
                 }
                 catch { /* ignore */ }
-                // Read stderr file
+                this.processBuffer();
+                // Clean up temp files
                 try {
-                    const errContent = readFileSync(errFile, 'utf8').trim();
-                    if (errContent) {
-                        debugLog(`STDERR FILE: ${errContent.slice(0, 200)}`);
-                    }
+                    unlinkSync(outFile);
                 }
                 catch { /* ignore */ }
-                this.processBuffer();
+                try {
+                    unlinkSync(errFile);
+                }
+                catch { /* ignore */ }
                 this.emit('exit', code);
                 resolve();
             });
@@ -142,7 +145,6 @@ export class ClaudeCodeExecutor extends EventEmitter {
                 if (msg.type === 'init' || msg.session_id) {
                     this.sessionId = msg.session_id || this.sessionId;
                 }
-                console.error(`[DEBUG] emitting message type: ${msg.type}`);
                 this.emit('message', msg);
                 // If this is the final result, emit that separately
                 if (msg.type === 'result') {
@@ -158,7 +160,6 @@ export class ClaudeCodeExecutor extends EventEmitter {
             }
             catch {
                 // Not valid JSON — might be a partial line or plain text output
-                // Just skip it
             }
         }
     }

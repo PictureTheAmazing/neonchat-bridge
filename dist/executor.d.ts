@@ -57,6 +57,8 @@ export declare class ClaudeCodeExecutor extends EventEmitter {
     /**
      * Execute a Claude Code command and stream the results.
      * Uses `claude -p` with `--output-format stream-json`.
+     * Stdout is redirected to a temp file and polled, because Claude Code's
+     * native binary doesn't write to Node.js socket-pair stdio on ARM64.
      */
     execute(options: ExecuteOptions): Promise<void>;
     /**

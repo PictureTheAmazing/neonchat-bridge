@@ -2,7 +2,6 @@ import WebSocket from 'ws';
 import pc from 'picocolors';
 import { hostname, platform, arch, type as osType, uptime } from 'node:os';
 import { execSync } from 'node:child_process';
-import { appendFileSync } from 'node:fs';
 import { ClaudeCodeExecutor } from './executor.js';
 import { getConfig } from './config.js';
 const HEARTBEAT_INTERVAL_MS = 30_000; // 30 seconds
@@ -208,12 +207,10 @@ export class ConnectionManager {
     /** Send a response back to NeonChat */
     sendResponse(response) {
         if (this.ws?.readyState === WebSocket.OPEN) {
-            const json = JSON.stringify(response);
-            appendFileSync('/tmp/bridge-debug.log', `${new Date().toISOString()} SEND: ${response.type} [${response.request_id}] ${json.slice(0, 300)}\n`);
-            this.ws.send(json);
-        }
-        else {
-            appendFileSync('/tmp/bridge-debug.log', `${new Date().toISOString()} SEND FAILED (ws not open): ${response.type}\n`);
+            this.ws.send(JSON.stringify(response));
+            if (this.verbose) {
+                this.log(pc.dim(`→ ${response.type} [${response.request_id}]`));
+            }
         }
     }
     /** Send a heartbeat with current system info */
