@@ -210,19 +210,33 @@ export class ClaudeCodeExecutor extends EventEmitter {
         if (code !== 0) {
           try {
             const stderr = readFileSync(errFile, 'utf8');
-            if (stderr.trim()) {
-              this.emit('message', {
-                type: 'assistant_message',
-                message: {
-                  role: 'assistant',
-                  content: [{
-                    type: 'text',
-                    text: `Claude Code exited with code ${code}. Error:\n${stderr}`,
-                  }],
-                },
-              });
-            }
-          } catch { /* ignore */ }
+            const errorMsg = stderr.trim()
+              ? `Claude Code exited with code ${code}.\n\nError output:\n${stderr}`
+              : `Claude Code exited with code ${code} (no error output captured)`;
+
+            this.emit('message', {
+              type: 'assistant_message',
+              message: {
+                role: 'assistant',
+                content: [{
+                  type: 'text',
+                  text: errorMsg,
+                }],
+              },
+            });
+          } catch (readErr) {
+            // Even if we can't read stderr, emit the exit code
+            this.emit('message', {
+              type: 'assistant_message',
+              message: {
+                role: 'assistant',
+                content: [{
+                  type: 'text',
+                  text: `Claude Code exited with code ${code} (failed to read error file: ${readErr})`,
+                }],
+              },
+            });
+          }
         }
 
         // Clean up temp files
