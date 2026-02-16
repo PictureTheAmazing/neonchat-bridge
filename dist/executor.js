@@ -1,6 +1,8 @@
 import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { readFileSync, statSync, openSync, readSync, closeSync, unlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 export class ClaudeCodeExecutor extends EventEmitter {
     process = null;
     sessionId = '';
@@ -43,10 +45,23 @@ export class ClaudeCodeExecutor extends EventEmitter {
             delete env.CLAUDECODE; // Allow spawning from within a Claude Code session
             // File-based stdout/stderr to work around native binary stdio issues
             const ts = Date.now();
-            const outFile = `/tmp/claude-bridge-${ts}.jsonl`;
-            const errFile = `/tmp/claude-bridge-${ts}.err`;
-            const cmd = ['claude', ...args].map(a => `'${a.replace(/'/g, "'\\''")}'`).join(' ');
-            this.process = spawn('sh', ['-c', `${cmd} > '${outFile}' 2> '${errFile}'`], {
+            const outFile = join(tmpdir(), `claude-bridge-${ts}.jsonl`);
+            const errFile = join(tmpdir(), `claude-bridge-${ts}.err`);
+            // Cross-platform shell spawning
+            const isWindows = process.platform === 'win32';
+            const shell = isWindows ? 'cmd.exe' : 'sh';
+            const shellFlag = isWindows ? '/c' : '-c';
+            let cmd;
+            if (isWindows) {
+                // Windows: cmd.exe syntax
+                cmd = `claude ${args.join(' ')} > "${outFile}" 2> "${errFile}"`;
+            }
+            else {
+                // Unix: sh syntax with proper quoting
+                cmd = ['claude', ...args].map(a => `'${a.replace(/'/g, "'\\''")}'`).join(' ');
+                cmd = `${cmd} > '${outFile}' 2> '${errFile}'`;
+            }
+            this.process = spawn(shell, [shellFlag, cmd], {
                 cwd,
                 env,
                 stdio: 'ignore',
