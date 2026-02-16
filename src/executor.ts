@@ -1,6 +1,6 @@
-import { spawn, exec, type ChildProcess } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, statSync, openSync, readSync, closeSync } from 'node:fs';
 import type { AgentMessage } from './types.js';
 
 function debugLog(msg: string) {
@@ -113,46 +113,73 @@ export class ClaudeCodeExecutor extends EventEmitter {
       debugLog(`Spawning: claude ${args.join(' ')}`);
       debugLog(`CWD: ${cwd}`);
 
+      // Use file-based output to work around potential stdio issues with Claude's native binary
+      const outFile = `/tmp/claude-bridge-${Date.now()}.jsonl`;
+      const errFile = `/tmp/claude-bridge-${Date.now()}.err`;
       const cmd = ['claude', ...args].map(a => `'${a.replace(/'/g, "'\\''")}'`).join(' ');
-      debugLog(`Shell cmd: ${cmd}`);
-      this.process = exec(cmd, {
+      const shellCmd = `${cmd} > '${outFile}' 2> '${errFile}'`;
+      debugLog(`Shell cmd: ${shellCmd}`);
+      this.process = spawn('sh', ['-c', shellCmd], {
         cwd,
         env,
-        maxBuffer: 100 * 1024 * 1024, // 100MB
-      }) as ChildProcess;
+        stdio: 'ignore',
+        detached: false,
+      });
 
       debugLog(`Spawned PID: ${this.process.pid}`);
-      debugLog(`stdout exists: ${!!this.process.stdout}`);
-      debugLog(`stderr exists: ${!!this.process.stderr}`);
+      debugLog(`Output file: ${outFile}`);
 
       this.buffer = '';
+      let fileOffset = 0;
 
-      this.process.stdout?.on('data', (chunk: Buffer) => {
-        const text = chunk.toString();
-        debugLog(`STDOUT: ${text.length} bytes: ${text.slice(0, 200)}`);
-        this.buffer += text;
-        this.processBuffer();
-      });
-
-      this.process.stderr?.on('data', (chunk: Buffer) => {
-        const text = chunk.toString().trim();
-        debugLog(`STDERR: ${text.slice(0, 200)}`);
-        if (text) {
-          this.emit('message', {
-            type: 'system',
-            content: [{ type: 'text', text }],
-          } as ClaudeStreamMessage);
+      // Poll the output file for new data
+      const pollInterval = setInterval(() => {
+        try {
+          const stat = statSync(outFile);
+          if (stat.size > fileOffset) {
+            const fd = openSync(outFile, 'r');
+            const buf = Buffer.alloc(stat.size - fileOffset);
+            readSync(fd, buf, 0, buf.length, fileOffset);
+            closeSync(fd);
+            fileOffset = stat.size;
+            const text = buf.toString();
+            debugLog(`FILE DATA: ${text.length} bytes: ${text.slice(0, 200)}`);
+            this.buffer += text;
+            this.processBuffer();
+          }
+        } catch {
+          // File might not exist yet
         }
-      });
+      }, 200);
 
       this.process.on('error', (err) => {
         debugLog(`ERROR: ${err.message}`);
+        clearInterval(pollInterval);
         this.emit('error', err);
         reject(err);
       });
 
       this.process.on('close', (code) => {
         debugLog(`CLOSE: code=${code}`);
+        clearInterval(pollInterval);
+        // Read any remaining data
+        try {
+          const stat = statSync(outFile);
+          if (stat.size > fileOffset) {
+            const fd = openSync(outFile, 'r');
+            const buf = Buffer.alloc(stat.size - fileOffset);
+            readSync(fd, buf, 0, buf.length, fileOffset);
+            closeSync(fd);
+            this.buffer += buf.toString();
+          }
+        } catch { /* ignore */ }
+        // Read stderr file
+        try {
+          const errContent = readFileSync(errFile, 'utf8').trim();
+          if (errContent) {
+            debugLog(`STDERR FILE: ${errContent.slice(0, 200)}`);
+          }
+        } catch { /* ignore */ }
         this.processBuffer();
         this.emit('exit', code);
         resolve();
