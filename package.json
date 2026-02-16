@@ -1,0 +1,29 @@
+{
+  "name": "@neonchat/bridge",
+  "version": "0.1.0",
+  "description": "NeonChat Bridge Agent - Connect Claude Code to NeonChat remotely",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "neonchat-bridge": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/cli.ts",
+    "start": "node dist/cli.js"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "conf": "^13.0.1",
+    "nanoid": "^5.0.9",
+    "ora": "^8.1.1",
+    "picocolors": "^1.1.1",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
