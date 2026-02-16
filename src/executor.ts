@@ -89,10 +89,10 @@ export class ClaudeCodeExecutor extends EventEmitter {
       args.push('--resume', options.session_id);
     }
 
-    // Set allowed tools
-    if (options.allowed_tools && options.allowed_tools.length > 0) {
-      args.push('--allowedTools', options.allowed_tools.join(','));
-    }
+    // Set allowed tools (disabled for now — debugging)
+    // if (options.allowed_tools && options.allowed_tools.length > 0) {
+    //   args.push('--allowedTools', options.allowed_tools.join(','));
+    // }
 
     // Load MCP config
     if (options.mcp_config_path) {
