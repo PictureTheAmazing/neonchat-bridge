@@ -114,7 +114,9 @@ export class ClaudeCodeExecutor extends EventEmitter {
       this.buffer = '';
 
       this.process.stdout?.on('data', (chunk: Buffer) => {
-        this.buffer += chunk.toString();
+        const text = chunk.toString();
+        console.error(`[DEBUG] stdout: ${text.length} bytes`);
+        this.buffer += text;
         this.processBuffer();
       });
 
@@ -172,6 +174,7 @@ export class ClaudeCodeExecutor extends EventEmitter {
           this.sessionId = msg.session_id || this.sessionId;
         }
 
+        console.error(`[DEBUG] emitting message type: ${msg.type}`);
         this.emit('message', msg);
 
         // If this is the final result, emit that separately
