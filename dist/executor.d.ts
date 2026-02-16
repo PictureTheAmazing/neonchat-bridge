@@ -8,7 +8,7 @@ export interface ExecutorEvents {
     /** An error occurred */
     error: (error: Error) => void;
     /** Process exited */
-    exit: (code: number | null) => void;
+    exit: (code: number | null, stderr?: string) => void;
 }
 /** A single message from Claude Code's stream-json output */
 export interface ClaudeStreamMessage {

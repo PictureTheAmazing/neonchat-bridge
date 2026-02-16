@@ -14,7 +14,7 @@ export interface ExecutorEvents {
   /** An error occurred */
   error: (error: Error) => void;
   /** Process exited */
-  exit: (code: number | null) => void;
+  exit: (code: number | null, stderr?: string) => void;
 }
 
 /** A single message from Claude Code's stream-json output */
@@ -206,7 +206,7 @@ export class ClaudeCodeExecutor extends EventEmitter {
         } catch { /* ignore */ }
         this.processBuffer();
 
-        // If there was an error, send stderr as a system message BEFORE cleanup
+        // Read stderr BEFORE cleanup to pass to exit handler
         let stderrContent = '';
         if (code !== 0) {
           try {
@@ -214,27 +214,14 @@ export class ClaudeCodeExecutor extends EventEmitter {
           } catch (readErr) {
             stderrContent = `(failed to read error file: ${readErr})`;
           }
-
-          const errorMsg = stderrContent.trim() && !stderrContent.startsWith('(failed')
-            ? `Claude Code exited with code ${code}.\n\nError output:\n${stderrContent}`
-            : `Claude Code exited with code ${code} (no error output captured)`;
-
-          this.emit('message', {
-            type: 'assistant_message',
-            message: {
-              role: 'assistant',
-              content: [{
-                type: 'text',
-                text: errorMsg,
-              }],
-            },
-          });
         }
 
-        // Clean up temp files AFTER reading stderr
+        // Clean up temp files
         try { unlinkSync(outFile); } catch { /* ignore */ }
         try { unlinkSync(errFile); } catch { /* ignore */ }
-        this.emit('exit', code);
+
+        // Emit exit with stderr content
+        this.emit('exit', code, stderrContent);
         resolve();
       });
 

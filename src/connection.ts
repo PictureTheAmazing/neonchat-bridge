@@ -188,13 +188,21 @@ export class ConnectionManager {
     });
 
     // Handle process exit (in case result never fires)
-    this.executor.on('exit', (code: number | null) => {
+    this.executor.on('exit', (code: number | null, stderr?: string) => {
       if (this.currentStatus === 'busy') {
         // Process exited while still busy - probably an error
+        let errorMsg = `Claude Code process exited with code ${code}`;
+
+        if (stderr && stderr.trim() && !stderr.startsWith('(failed')) {
+          errorMsg += `\n\nError output:\n${stderr}`;
+        } else if (code !== 0) {
+          errorMsg += ' (no error output captured)';
+        }
+
         this.sendResponse({
           type: 'error',
           request_id: command.request_id,
-          error: `Claude Code process exited unexpectedly with code ${code}`,
+          error: errorMsg,
         });
         this.currentStatus = 'online';
       }
