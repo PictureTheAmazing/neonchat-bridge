@@ -113,10 +113,13 @@ export class ClaudeCodeExecutor extends EventEmitter {
       debugLog(`Spawning: claude ${args.join(' ')}`);
       debugLog(`CWD: ${cwd}`);
 
-      this.process = spawn('claude', args, {
+      const cmd = ['claude', ...args].map(a => `'${a.replace(/'/g, "'\\''")}'`).join(' ');
+      debugLog(`Shell cmd: ${cmd}`);
+      this.process = spawn(cmd, [], {
         cwd,
         env,
         stdio: ['pipe', 'pipe', 'pipe'],
+        shell: true,
       });
 
       debugLog(`Spawned PID: ${this.process.pid}`);
