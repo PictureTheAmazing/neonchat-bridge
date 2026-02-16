@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, execSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { readFileSync, statSync, openSync, readSync, closeSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -17,6 +17,17 @@ export class ClaudeCodeExecutor extends EventEmitter {
      * native binary doesn't write to Node.js socket-pair stdio on ARM64.
      */
     async execute(options) {
+        // Pre-flight check: verify claude command exists
+        const isWindows = process.platform === 'win32';
+        const checkCmd = isWindows ? 'where claude' : 'which claude';
+        try {
+            execSync(checkCmd, { stdio: 'pipe' });
+        }
+        catch (err) {
+            throw new Error('Claude CLI not found in PATH. Please install it from https://claude.ai/download ' +
+                'and ensure the "claude" command is available. ' +
+                (isWindows ? 'You may need to restart your terminal after installation.' : ''));
+        }
         const args = [
             '-p', options.prompt,
             '--output-format', 'stream-json',
@@ -140,16 +151,28 @@ export class ClaudeCodeExecutor extends EventEmitter {
                 }
                 catch { /* ignore */ }
                 this.processBuffer();
-                // Read stderr BEFORE cleanup to pass to exit handler
+                // Read stderr and stdout BEFORE cleanup to pass to exit handler
                 let stderrContent = '';
+                let stdoutContent = '';
                 if (code !== 0) {
                     try {
                         stderrContent = readFileSync(errFile, 'utf8');
                     }
                     catch (readErr) {
-                        stderrContent = `(failed to read error file: ${readErr})`;
+                        stderrContent = `(failed to read stderr: ${readErr})`;
                     }
+                    // Also check stdout in case errors went there
+                    try {
+                        const fullStdout = readFileSync(outFile, 'utf8');
+                        // If there's unparsed output in stdout, include it
+                        if (fullStdout && !fullStdout.trim().startsWith('{')) {
+                            stdoutContent = fullStdout;
+                        }
+                    }
+                    catch { /* ignore */ }
                 }
+                // Combine stderr and stdout for diagnostics
+                const diagnostics = [stderrContent, stdoutContent].filter(s => s.trim()).join('\n---\n');
                 // Clean up temp files
                 try {
                     unlinkSync(outFile);
@@ -159,8 +182,8 @@ export class ClaudeCodeExecutor extends EventEmitter {
                     unlinkSync(errFile);
                 }
                 catch { /* ignore */ }
-                // Emit exit with stderr content
-                this.emit('exit', code, stderrContent);
+                // Emit exit with diagnostic content
+                this.emit('exit', code, diagnostics || undefined);
                 resolve();
             });
             // Set timeout
