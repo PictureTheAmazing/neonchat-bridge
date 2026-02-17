@@ -19,6 +19,8 @@ export declare class ConnectionManager {
     private cancelExecution;
     /** Browse files on this machine (read-only directory listing) */
     private browseFiles;
+    /** Update bridge config from a remote command */
+    private handleSetConfig;
     /** Send a response back to NeonChat */
     private sendResponse;
     /** Send a heartbeat with current system info */

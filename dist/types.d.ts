@@ -1,6 +1,6 @@
 export type AgentStatus = 'online' | 'offline' | 'busy' | 'error';
 export interface AgentCommand {
-    type: 'command' | 'resume' | 'cancel' | 'file_browse';
+    type: 'command' | 'resume' | 'cancel' | 'file_browse' | 'set_config';
     request_id: string;
     session_id?: string;
     prompt: string;
@@ -8,6 +8,14 @@ export interface AgentCommand {
     working_directory?: string;
     allowed_tools?: string[];
     mcp_config?: Record<string, unknown>;
+    /** For set_config: key-value pairs to update in the bridge config */
+    config_updates?: Record<string, unknown>;
+}
+export interface SetConfigResult {
+    type: 'set_config_result';
+    request_id: string;
+    success: boolean;
+    error?: string;
 }
 export interface DirectoryEntry {
     name: string;

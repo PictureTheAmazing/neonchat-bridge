@@ -5,8 +5,8 @@ import { execSync } from 'node:child_process';
 import { readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { ClaudeCodeExecutor, type ClaudeStreamMessage, type ClaudeResult } from './executor.js';
-import { getConfig } from './config.js';
-import type { AgentCommand, AgentHeartbeat, AgentResponse, AgentStatus, SystemInfo, FileBrowseResult } from './types.js';
+import { getConfig, setConfig } from './config.js';
+import type { AgentCommand, AgentHeartbeat, AgentResponse, AgentStatus, SystemInfo, FileBrowseResult, SetConfigResult } from './types.js';
 
 const HEARTBEAT_INTERVAL_MS = 30_000; // 30 seconds
 const RECONNECT_DELAY_MS = 5_000;     // 5 seconds
@@ -103,7 +103,11 @@ export class ConnectionManager {
         break;
 
       case 'file_browse':
-        await this.browseFiles(command);
+        this.browseFiles(command);
+        break;
+
+      case 'set_config':
+        this.handleSetConfig(command);
         break;
 
       default:
@@ -279,6 +283,40 @@ export class ConnectionManager {
       }
     } catch (err) {
       result.error = err instanceof Error ? err.message : 'Failed to read directory';
+    }
+
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(result));
+    }
+  }
+
+  /** Update bridge config from a remote command */
+  private handleSetConfig(command: AgentCommand): void {
+    const result: SetConfigResult = {
+      type: 'set_config_result',
+      request_id: command.request_id,
+      success: false,
+    };
+
+    try {
+      const updates = command.config_updates;
+      if (!updates || typeof updates !== 'object') {
+        result.error = 'Missing config_updates';
+      } else {
+        // Only allow safe config keys to be set remotely
+        const allowed: Array<keyof typeof updates> = ['default_working_dir'];
+        const filtered: Record<string, unknown> = {};
+        for (const key of allowed) {
+          if (key in updates) filtered[key] = updates[key];
+        }
+        setConfig(filtered as Parameters<typeof setConfig>[0]);
+        result.success = true;
+        this.log(pc.green(`Config updated: ${JSON.stringify(filtered)}`));
+        // Send a heartbeat so the client sees the new default_working_dir immediately
+        this.sendHeartbeat();
+      }
+    } catch (err) {
+      result.error = err instanceof Error ? err.message : 'Failed to update config';
     }
 
     if (this.ws?.readyState === WebSocket.OPEN) {
