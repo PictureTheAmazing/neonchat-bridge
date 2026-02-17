@@ -9,9 +9,24 @@ export interface AgentCommand {
   request_id: string;
   session_id?: string;
   prompt: string;
+  path?: string;
   working_directory?: string;
   allowed_tools?: string[];
   mcp_config?: Record<string, unknown>;
+}
+
+export interface DirectoryEntry {
+  name: string;
+  path: string;
+  isDirectory: boolean;
+}
+
+export interface FileBrowseResult {
+  type: 'file_browse_result';
+  request_id: string;
+  path: string;
+  entries: DirectoryEntry[];
+  error?: string;
 }
 
 export interface AgentResponse {

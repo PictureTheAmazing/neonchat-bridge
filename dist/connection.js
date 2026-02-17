@@ -1,7 +1,9 @@
 import WebSocket from 'ws';
 import pc from 'picocolors';
-import { hostname, platform, arch, type as osType, uptime } from 'node:os';
+import { hostname, platform, arch, type as osType, uptime, homedir } from 'node:os';
 import { execSync } from 'node:child_process';
+import { readdirSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { ClaudeCodeExecutor } from './executor.js';
 import { getConfig } from './config.js';
 const HEARTBEAT_INTERVAL_MS = 30_000; // 30 seconds
@@ -212,16 +214,44 @@ export class ConnectionManager {
             });
         }
     }
-    /** Browse files on this machine (read-only) */
-    async browseFiles(command) {
-        // Use a quick Claude Code call to list directory contents
-        const executor = new ClaudeCodeExecutor();
-        await executor.execute({
-            prompt: command.prompt, // e.g., "List the files in /home/user/projects"
-            allowed_tools: ['Read', 'Glob', 'Grep'], // Read-only tools
-            working_directory: command.working_directory,
-            timeout_ms: 15_000,
-        });
+    /** Browse files on this machine (read-only directory listing) */
+    browseFiles(command) {
+        const config = getConfig();
+        const requestedPath = command.path || command.working_directory || config.default_working_dir || homedir();
+        const targetPath = resolve(requestedPath);
+        const result = {
+            type: 'file_browse_result',
+            request_id: command.request_id,
+            path: targetPath,
+            entries: [],
+        };
+        try {
+            const items = readdirSync(targetPath, { withFileTypes: true });
+            result.entries = items
+                .filter((item) => !item.name.startsWith('.') || item.name === '..')
+                .map((item) => {
+                const fullPath = join(targetPath, item.name);
+                const isDir = item.isDirectory();
+                return { name: item.name, path: fullPath, isDirectory: isDir };
+            })
+                .sort((a, b) => {
+                // Directories first, then files
+                if (a.isDirectory !== b.isDirectory)
+                    return a.isDirectory ? -1 : 1;
+                return a.name.localeCompare(b.name);
+            });
+            // Add parent directory entry if not at root
+            const parent = resolve(targetPath, '..');
+            if (parent !== targetPath) {
+                result.entries.unshift({ name: '..', path: parent, isDirectory: true });
+            }
+        }
+        catch (err) {
+            result.error = err instanceof Error ? err.message : 'Failed to read directory';
+        }
+        if (this.ws?.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify(result));
+        }
     }
     /** Send a response back to NeonChat */
     sendResponse(response) {

@@ -17,7 +17,7 @@ export declare class ConnectionManager {
     private executeCommand;
     /** Cancel the current execution */
     private cancelExecution;
-    /** Browse files on this machine (read-only) */
+    /** Browse files on this machine (read-only directory listing) */
     private browseFiles;
     /** Send a response back to NeonChat */
     private sendResponse;
