@@ -49,4 +49,5 @@ export interface SystemInfo {
   uptime_seconds: number;
   memory_usage_mb: number;
   node_version: string;
+  default_working_dir: string;
 }

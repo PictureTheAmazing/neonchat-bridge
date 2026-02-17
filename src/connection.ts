@@ -287,6 +287,7 @@ export class ConnectionManager {
         uptime_seconds: Math.floor(uptime()),
         memory_usage_mb: Math.round((process.memoryUsage().rss / 1024 / 1024)),
         node_version: process.version,
+        default_working_dir: config.default_working_dir,
       },
       current_session: this.currentSessionId || undefined,
       timestamp: new Date().toISOString(),
