@@ -191,6 +191,9 @@ export class ConnectionManager {
                 working_directory: command.working_directory || config.default_working_dir,
                 session_id: command.type === 'resume' ? command.session_id : undefined,
                 allowed_tools: command.allowed_tools || config.allowed_tools,
+                model: command.model,
+                effort_level: command.effort_level,
+                permission_level: command.permission_level,
             });
         }
         catch (err) {

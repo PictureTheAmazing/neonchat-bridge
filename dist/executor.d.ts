@@ -48,6 +48,9 @@ export interface ExecuteOptions {
     mcp_config_path?: string;
     system_prompt_append?: string;
     timeout_ms?: number;
+    model?: string;
+    effort_level?: string;
+    permission_level?: 'read-only' | 'safe' | 'full';
 }
 export declare class ClaudeCodeExecutor extends EventEmitter {
     private process;

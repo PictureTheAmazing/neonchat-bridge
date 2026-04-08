@@ -1,7 +1,10 @@
 import pc from 'picocolors';
 import { getConfig, getConfigPath } from '../config.js';
 import { ConnectionManager } from '../connection.js';
+import { checkForUpdates } from '../updater.js';
 export async function start(opts) {
+    // Check for updates before starting (auto-updates if available)
+    await checkForUpdates(opts.verbose);
     const config = getConfig();
     if (!config.is_configured) {
         console.log(pc.red('✗ Agent not configured yet.'));

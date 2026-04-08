@@ -23,7 +23,7 @@ export async function checkForUpdates(verbose = false): Promise<void> {
       return;
     }
 
-    const data = await response.json();
+    const data = await response.json() as { sha?: string };
     const latestCommit = data.sha?.substring(0, 7);
 
     if (!latestCommit) {
