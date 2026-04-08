@@ -1,6 +1,7 @@
 import pc from 'picocolors';
 import { getConfig, getConfigPath } from '../config.js';
 import { ConnectionManager } from '../connection.js';
+import { checkForUpdates } from '../updater.js';
 
 interface StartOpts {
   server?: string;
@@ -8,6 +9,9 @@ interface StartOpts {
 }
 
 export async function start(opts: StartOpts): Promise<void> {
+  // Check for updates before starting (auto-updates if available)
+  await checkForUpdates(opts.verbose);
+
   const config = getConfig();
 
   if (!config.is_configured) {
