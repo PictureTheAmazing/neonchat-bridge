@@ -59,6 +59,9 @@ export interface ExecuteOptions {
   mcp_config_path?: string;
   system_prompt_append?: string;
   timeout_ms?: number;
+  model?: string; // Claude model to use
+  effort_level?: string; // Reasoning effort (low/medium/high)
+  permission_level?: 'read-only' | 'safe' | 'full'; // Permission mode
 }
 
 export class ClaudeCodeExecutor extends EventEmitter {
@@ -106,16 +109,36 @@ export class ClaudeCodeExecutor extends EventEmitter {
       '-p', options.prompt,
       '--output-format', 'stream-json',
       '--verbose',
-      '--dangerously-skip-permissions',
     ];
+
+    // Permission level handling
+    const permissionLevel = options.permission_level || 'full';
+    if (permissionLevel === 'full') {
+      args.push('--dangerously-skip-permissions');
+    } else if (permissionLevel === 'read-only') {
+      // Read-only: limit to safe read-only tools
+      const readOnlyTools = ['Read', 'Grep', 'Glob', 'Bash'];
+      args.push('--allowedTools', readOnlyTools.join(','));
+    }
+    // 'safe' mode: no skip-permissions flag, user will be prompted for approval
+
+    // Model selection
+    if (options.model) {
+      args.push('--model', options.model);
+    }
+
+    // Effort level
+    if (options.effort_level) {
+      args.push('--effort', options.effort_level);
+    }
 
     // Resume existing session
     if (options.session_id) {
       args.push('--resume', options.session_id);
     }
 
-    // Set allowed tools
-    if (options.allowed_tools && options.allowed_tools.length > 0) {
+    // Set allowed tools (if specified and not overridden by permission level)
+    if (options.allowed_tools && options.allowed_tools.length > 0 && permissionLevel !== 'read-only') {
       args.push('--allowedTools', options.allowed_tools.join(','));
     }
 

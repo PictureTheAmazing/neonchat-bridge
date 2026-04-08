@@ -13,6 +13,9 @@ export interface AgentCommand {
   working_directory?: string;
   allowed_tools?: string[];
   mcp_config?: Record<string, unknown>;
+  model?: string;
+  effort_level?: string;
+  permission_level?: 'read-only' | 'safe' | 'full';
   /** For set_config: key-value pairs to update in the bridge config */
   config_updates?: Record<string, unknown>;
 }
